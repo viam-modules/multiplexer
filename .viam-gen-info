@@ -1,0 +1,13 @@
+{
+  "module_name": "multiplexer",
+  "visibility": "public",
+  "namespace": "viam",
+  "language": "go",
+  "resource_type": "service",
+  "resource_subtype": "generic",
+  "model_name": "generic-service-multiplexer",
+  "initialize_git": false,
+  "generator_version": "0.1.0",
+  "generated_on": "2026-04-23T14:38:31.574674Z",
+  "module_readme_link": "README.md"
+}
