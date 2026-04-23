@@ -2,10 +2,10 @@
   "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "viam:multiplexer",
   "visibility": "public",
-  "url": "",
-  "description": "Modular generic service: generic-service-multiplexer",
+  "url": "https://github.com/viam-modules/multiplexer",
+  "description": "Fan out DoCommand and Status calls in parallel across multiple generic services.",
   "applications": null,
-  "markdown_link": "README.md",
+  "markdown_link": "README.md#model-viammultiplexergeneric-service-multiplexer",
   "entrypoint": "bin/multiplexer",
   "first_run": "",
   "build": {
