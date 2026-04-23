@@ -2,18 +2,15 @@ package multiplexer
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"sync"
 
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	generic "go.viam.com/rdk/services/generic"
 )
 
-var (
-	GenericServiceMultiplexer = resource.NewModel("viam", "multiplexer", "generic-service-multiplexer")
-	errUnimplemented          = errors.New("unimplemented")
-)
+var GenericServiceMultiplexer = resource.NewModel("viam", "multiplexer", "generic-service-multiplexer")
 
 func init() {
 	resource.RegisterService(generic.API, GenericServiceMultiplexer,
@@ -24,35 +21,26 @@ func init() {
 }
 
 type Config struct {
-	/*
-		Put config attributes here. There should be public/exported fields
-		with a `json` parameter at the end of each attribute.
-
-		Example config struct:
-			type Config struct {
-				Pin   string `json:"pin"`
-				Board string `json:"board"`
-				MinDeg *float64 `json:"min_angle_deg,omitempty"`
-			}
-
-		If your model does not need a config, replace *Config in the init
-		function with resource.NoNativeConfig
-	*/
+	Dependencies []string `json:"dependencies"`
 }
 
-// Validate ensures all parts of the config are valid and important fields exist.
-// Returns three values:
-//  1. Required dependencies: other resources that must exist for this resource to work.
-//  2. Optional dependencies: other resources that may exist but are not required.
-//  3. An error if any Config fields are missing or invalid.
-//
-// The `path` parameter indicates
-// where this resource appears in the machine's JSON configuration
-// (for example, "components.0"). You can use it in error messages
-// to indicate which resource has a problem.
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
-	// Add config validation code here
-	return nil, nil, nil
+	if len(cfg.Dependencies) == 0 {
+		return nil, nil, fmt.Errorf("%s: at least one dependency is required", path)
+	}
+	required := make([]string, 0, len(cfg.Dependencies))
+	for i, name := range cfg.Dependencies {
+		if name == "" {
+			return nil, nil, fmt.Errorf("%s.dependencies[%d]: empty dependency name", path, i)
+		}
+		required = append(required, generic.Named(name).String())
+	}
+	return required, nil, nil
+}
+
+type depEntry struct {
+	name string
+	svc  generic.Service
 }
 
 type multiplexerGenericServiceMultiplexer struct {
@@ -62,6 +50,7 @@ type multiplexerGenericServiceMultiplexer struct {
 
 	logger logging.Logger
 	cfg    *Config
+	deps   []depEntry
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -74,37 +63,90 @@ func newMultiplexerGenericServiceMultiplexer(ctx context.Context, deps resource.
 	}
 
 	return NewGenericServiceMultiplexer(ctx, deps, rawConf.ResourceName(), conf, logger)
-
 }
 
 func NewGenericServiceMultiplexer(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, logger logging.Logger) (resource.Resource, error) {
-
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 
-	s := &multiplexerGenericServiceMultiplexer{
+	resolved := make([]depEntry, 0, len(conf.Dependencies))
+	for _, depName := range conf.Dependencies {
+		res, err := deps.Lookup(generic.Named(depName))
+		if err != nil {
+			cancelFunc()
+			return nil, fmt.Errorf("could not resolve dependency %q: %w", depName, err)
+		}
+		svc, ok := res.(generic.Service)
+		if !ok {
+			cancelFunc()
+			return nil, fmt.Errorf("dependency %q is not a generic.Service (got %T)", depName, res)
+		}
+		resolved = append(resolved, depEntry{name: depName, svc: svc})
+	}
+
+	return &multiplexerGenericServiceMultiplexer{
 		name:       name,
 		logger:     logger,
 		cfg:        conf,
+		deps:       resolved,
 		cancelCtx:  cancelCtx,
 		cancelFunc: cancelFunc,
-	}
-	return s, nil
+	}, nil
 }
 
 func (s *multiplexerGenericServiceMultiplexer) Name() resource.Name {
 	return s.name
 }
 
+func (s *multiplexerGenericServiceMultiplexer) fanOut(
+	ctx context.Context,
+	op string,
+	call func(ctx context.Context, svc generic.Service) (map[string]interface{}, error),
+) map[string]interface{} {
+	type out struct {
+		name string
+		res  map[string]interface{}
+		err  error
+	}
+
+	ch := make(chan out, len(s.deps))
+	var wg sync.WaitGroup
+	for _, d := range s.deps {
+		wg.Add(1)
+		go func(d depEntry) {
+			defer wg.Done()
+			res, err := call(ctx, d.svc)
+			ch <- out{name: d.name, res: res, err: err}
+		}(d)
+	}
+	wg.Wait()
+	close(ch)
+
+	results := map[string]interface{}{}
+	errs := map[string]interface{}{}
+	for o := range ch {
+		if o.err != nil {
+			s.logger.Warnf("%s on dep %q failed: %v", op, o.name, o.err)
+			errs[o.name] = o.err.Error()
+			continue
+		}
+		results[o.name] = o.res
+	}
+	return map[string]interface{}{"results": results, "errors": errs}
+}
+
 func (s *multiplexerGenericServiceMultiplexer) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("not implemented")
+	return s.fanOut(ctx, "DoCommand", func(ctx context.Context, svc generic.Service) (map[string]interface{}, error) {
+		return svc.DoCommand(ctx, cmd)
+	}), nil
 }
 
 func (s *multiplexerGenericServiceMultiplexer) Status(ctx context.Context) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("not implemented")
+	return s.fanOut(ctx, "Status", func(ctx context.Context, svc generic.Service) (map[string]interface{}, error) {
+		return svc.Status(ctx)
+	}), nil
 }
 
 func (s *multiplexerGenericServiceMultiplexer) Close(context.Context) error {
-	// Put close code here
 	s.cancelFunc()
 	return nil
 }
