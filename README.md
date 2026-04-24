@@ -1,6 +1,6 @@
 # Multiplexer
 
-A Viam module that exposes a single generic service which fans out `DoCommand` and `Status` calls to a configured list of underlying generic services in parallel, then aggregates the per-dependency responses (and errors) into one map. Use it when a client should talk to a single logical endpoint that drives several backend generic services at once — for example, broadcasting a command to every backend, collecting status from a fleet of services, or composing a higher-level service from several existing ones without modifying them.
+A Viam module that exposes a single generic service which fans out `DoCommand` and `Status` calls to a configured list of underlying resources in parallel, then aggregates the per-dependency responses (and errors) into one map. Use it when a client should talk to a single logical endpoint that drives several backend resources at once — for example, broadcasting a command to every backend, collecting status from a fleet of components, or composing a higher-level service from several existing ones without modifying them.
 
 Per-dependency failures are logged as warnings and surfaced in the response, but do not cause the overall call to fail.
 
@@ -8,11 +8,11 @@ Per-dependency failures are logged as warnings and surfaced in the response, but
 
 This module provides the following model(s):
 
-- [`viam:multiplexer:generic-service-multiplexer`](#model-viammultiplexergeneric-service-multiplexer) — fans out `DoCommand` / `Status` to a configured list of generic service dependencies.
+- [`viam:multiplexer:resource-multiplexer`](#model-viammultiplexerresource-multiplexer) — fans out `DoCommand` / `Status` to a configured list of resource dependencies.
 
-## Model: viam:multiplexer:generic-service-multiplexer
+## Model: viam:multiplexer:resource-multiplexer
 
-Wraps a list of generic services declared via `dependencies`. Every `DoCommand` and `Status` call is dispatched concurrently (one goroutine per dependency); once all dependencies have returned, the multiplexer aggregates the responses into:
+Wraps a list of resources declared via `dependencies`. Every `DoCommand` and `Status` call is dispatched concurrently (one goroutine per dependency); once all dependencies have returned, the multiplexer aggregates the responses into:
 
 ```json
 {
@@ -35,7 +35,7 @@ The following attribute template can be used to configure this model:
 
 ```json
 {
-  "dependencies": ["<generic_service_name>", "<generic_service_name>"]
+  "dependencies": ["<resource_name>", "<resource_name>"]
 }
 ```
 
@@ -45,7 +45,7 @@ The following attributes are available for this model:
 
 | Name           | Type     | Inclusion | Description                                                                                                    |
 |----------------|----------|-----------|----------------------------------------------------------------------------------------------------------------|
-| `dependencies` | []string | Required  | Names of the generic services to fan out to. Must contain at least one entry; entries cannot be empty strings. |
+| `dependencies` | []string | Required  | Names of the resources to fan out to. Must contain at least one entry; entries cannot be empty strings. |
 
 #### Example Configuration
 
