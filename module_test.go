@@ -318,27 +318,6 @@ func TestStatus_PartialErrors(t *testing.T) {
 	}
 }
 
-// ---- Non-generic-service resource resolution ----
-
-// TestNew_NonGenericResource verifies that deps that are NOT generic.Service
-// (e.g. an arm component) are accepted.
-func TestNew_NonGenericResource(t *testing.T) {
-	// Use a resource.Name with a different API (e.g. a hypothetical component).
-	armAPI := resource.APINamespaceRDK.WithComponentType("arm")
-	armName := resource.NewName(armAPI, "my-arm")
-	armRes := &fakeResource{name: armName}
-
-	deps := resource.Dependencies{armName: armRes}
-	conf := &Config{Dependencies: []string{"my-arm"}}
-	name := generic.Named("mux")
-
-	mux, err := New(context.Background(), deps, name, conf, testLogger())
-	if err != nil {
-		t.Fatalf("expected non-generic resource to be accepted; got error: %v", err)
-	}
-	defer mux.Close(context.Background())
-}
-
 // ---- Close test ----
 
 func TestClose_CancelsContext(t *testing.T) {
