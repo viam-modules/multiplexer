@@ -9,5 +9,5 @@ import (
 
 func main() {
 	// ModularMain can take multiple APIModel arguments, if your module implements multiple models.
-	module.ModularMain(resource.APIModel{API: generic.API, Model: multiplexer.GenericServiceMultiplexer})
+	module.ModularMain(resource.APIModel{API: generic.API, Model: multiplexer.ResourceMultiplexer})
 }

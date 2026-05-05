@@ -24,7 +24,7 @@ func realMain() error {
 
 	cfg := multiplexer.Config{}
 
-	thing, err := multiplexer.NewGenericServiceMultiplexer(ctx, deps, generic.Named("foo"), &cfg, logger)
+	thing, err := multiplexer.New(ctx, deps, generic.Named("foo"), &cfg, logger)
 	if err != nil {
 		return err
 	}

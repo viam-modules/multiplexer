@@ -10,12 +10,12 @@ import (
 	generic "go.viam.com/rdk/services/generic"
 )
 
-var GenericServiceMultiplexer = resource.NewModel("viam", "multiplexer", "generic-service-multiplexer")
+var ResourceMultiplexer = resource.NewModel("viam", "multiplexer", "resource-multiplexer")
 
 func init() {
-	resource.RegisterService(generic.API, GenericServiceMultiplexer,
+	resource.RegisterService(generic.API, ResourceMultiplexer,
 		resource.Registration[resource.Resource, *Config]{
-			Constructor: newMultiplexerGenericServiceMultiplexer,
+			Constructor: newResourceMux,
 		},
 	)
 }
@@ -33,17 +33,17 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		if name == "" {
 			return nil, nil, fmt.Errorf("%s.dependencies[%d]: empty dependency name", path, i)
 		}
-		required = append(required, generic.Named(name).String())
+		required = append(required, name)
 	}
 	return required, nil, nil
 }
 
 type depEntry struct {
 	name string
-	svc  generic.Service
+	svc  resource.Resource
 }
 
-type multiplexerGenericServiceMultiplexer struct {
+type resourceMux struct {
 	resource.AlwaysRebuild
 
 	name resource.Name
@@ -56,34 +56,35 @@ type multiplexerGenericServiceMultiplexer struct {
 	cancelFunc func()
 }
 
-func newMultiplexerGenericServiceMultiplexer(ctx context.Context, deps resource.Dependencies, rawConf resource.Config, logger logging.Logger) (resource.Resource, error) {
+func newResourceMux(ctx context.Context, deps resource.Dependencies, rawConf resource.Config, logger logging.Logger) (resource.Resource, error) {
 	conf, err := resource.NativeConfig[*Config](rawConf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGenericServiceMultiplexer(ctx, deps, rawConf.ResourceName(), conf, logger)
+	return New(ctx, deps, rawConf.ResourceName(), conf, logger)
 }
 
-func NewGenericServiceMultiplexer(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, logger logging.Logger) (resource.Resource, error) {
+func New(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, logger logging.Logger) (resource.Resource, error) {
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 
 	resolved := make([]depEntry, 0, len(conf.Dependencies))
 	for _, depName := range conf.Dependencies {
-		res, err := deps.Lookup(generic.Named(depName))
-		if err != nil {
-			cancelFunc()
-			return nil, fmt.Errorf("could not resolve dependency %q: %w", depName, err)
+		var res resource.Resource
+		for n, r := range deps {
+			if n.Name == depName || n.String() == depName {
+				res = r
+				break
+			}
 		}
-		svc, ok := res.(generic.Service)
-		if !ok {
+		if res == nil {
 			cancelFunc()
-			return nil, fmt.Errorf("dependency %q is not a generic.Service (got %T)", depName, res)
+			return nil, fmt.Errorf("could not resolve dependency %q", depName)
 		}
-		resolved = append(resolved, depEntry{name: depName, svc: svc})
+		resolved = append(resolved, depEntry{name: depName, svc: res})
 	}
 
-	return &multiplexerGenericServiceMultiplexer{
+	return &resourceMux{
 		name:       name,
 		logger:     logger,
 		cfg:        conf,
@@ -93,14 +94,14 @@ func NewGenericServiceMultiplexer(ctx context.Context, deps resource.Dependencie
 	}, nil
 }
 
-func (s *multiplexerGenericServiceMultiplexer) Name() resource.Name {
+func (s *resourceMux) Name() resource.Name {
 	return s.name
 }
 
-func (s *multiplexerGenericServiceMultiplexer) fanOut(
+func (s *resourceMux) fanOut(
 	ctx context.Context,
 	op string,
-	call func(ctx context.Context, svc generic.Service) (map[string]interface{}, error),
+	call func(ctx context.Context, svc resource.Resource) (map[string]interface{}, error),
 ) map[string]interface{} {
 	type out struct {
 		name string
@@ -134,19 +135,19 @@ func (s *multiplexerGenericServiceMultiplexer) fanOut(
 	return map[string]interface{}{"results": results, "errors": errs}
 }
 
-func (s *multiplexerGenericServiceMultiplexer) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	return s.fanOut(ctx, "DoCommand", func(ctx context.Context, svc generic.Service) (map[string]interface{}, error) {
+func (s *resourceMux) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	return s.fanOut(ctx, "DoCommand", func(ctx context.Context, svc resource.Resource) (map[string]interface{}, error) {
 		return svc.DoCommand(ctx, cmd)
 	}), nil
 }
 
-func (s *multiplexerGenericServiceMultiplexer) Status(ctx context.Context) (map[string]interface{}, error) {
-	return s.fanOut(ctx, "Status", func(ctx context.Context, svc generic.Service) (map[string]interface{}, error) {
+func (s *resourceMux) Status(ctx context.Context) (map[string]interface{}, error) {
+	return s.fanOut(ctx, "Status", func(ctx context.Context, svc resource.Resource) (map[string]interface{}, error) {
 		return svc.Status(ctx)
 	}), nil
 }
 
-func (s *multiplexerGenericServiceMultiplexer) Close(context.Context) error {
+func (s *resourceMux) Close(context.Context) error {
 	s.cancelFunc()
 	return nil
 }
