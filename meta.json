@@ -5,6 +5,12 @@
   "url": "https://github.com/viam-modules/multiplexer",
   "description": "Fan out DoCommand and Status calls in parallel across multiple resources.",
   "applications": null,
+  "models": [
+    {
+      "api": "rdk:service:generic",
+      "model": "viam:multiplexer:resource-multiplexer"
+    }
+  ],
   "markdown_link": "README.md#model-viammultiplexerresource-multiplexer",
   "entrypoint": "bin/multiplexer",
   "first_run": "",
