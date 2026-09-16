@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"multiplexer"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	generic "go.viam.com/rdk/services/generic"
+	"multiplexer"
 )
 
 func main() {
