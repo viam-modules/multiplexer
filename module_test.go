@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"go.viam.com/rdk/logging"
@@ -153,10 +154,13 @@ func TestNew_MultipleDepsSomeResolved(t *testing.T) {
 // ---- DoCommand fan-out tests ----
 
 func TestDoCommand_FansOutToAllDependencies(t *testing.T) {
+	var mu sync.Mutex
 	called := map[string]bool{}
 	makeDoFn := func(id string) func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
 		return func(_ context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+			mu.Lock()
 			called[id] = true
+			mu.Unlock()
 			return map[string]interface{}{"from": id}, nil
 		}
 	}
@@ -239,10 +243,13 @@ func TestDoCommand_PartialErrors(t *testing.T) {
 // ---- Status fan-out tests ----
 
 func TestStatus_FansOutToAllDependencies(t *testing.T) {
+	var mu sync.Mutex
 	called := map[string]bool{}
 	makeStatusFn := func(id string) func(context.Context) (map[string]interface{}, error) {
 		return func(_ context.Context) (map[string]interface{}, error) {
+			mu.Lock()
 			called[id] = true
+			mu.Unlock()
 			return map[string]interface{}{"id": id}, nil
 		}
 	}
